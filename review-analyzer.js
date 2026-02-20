@@ -9,63 +9,25 @@ const AI_MODEL = 'llama-3.3-70b-versatile';
 
 // --- Simulation Data ---
 const NAMES = ['Budi', 'Siti', 'Agus', 'Dewi', 'Rina', 'Joko', 'Tini', 'Bayu', 'Lestari', 'Hendra'];
-const POSITIVE_COMMENTS = [
-    'Pelayanan ramah banget, apotekernya informatif.',
-    'Lengkap obatnya, harga standar.',
-    'Tempat bersih dan nyaman.',
-    'Cepat tanggap, mantap.',
-    'Suka belanja di sini, parkir luas.'
-];
-const STOCK_ISSUES = [
-    'Cari obat batuk X kosong terus.',
-    'Barang sering habis, padahal butuh urgent.',
-    'Vitamin C merek Y ga ada stok.',
-    'Kecewa, jauh-jauh datang obatnya kosong.',
-    'Stok masker habis melulu.'
-];
-const SERVICE_ISSUES = [
-    'Antrian lama banget, kasir cuma satu.',
-    'Pegawainya jutek, ga senyum.',
-    'Salah kasih obat, untung saya cek lagi.',
-    'Lama nunggu racikan puyer.',
-    'Admin WA slow respon.'
-];
+// --- Real Data Fetching (Placeholder) ---
+/**
+ * In a real-world scenario, you would fetch reviews from Google Maps API, 
+ * Apotek Alpro Internal Feedback System, or a 'raw_reviews' table.
+ * For now, we omit simulated data to prevent bias.
+ */
+async function fetchRealReviews() {
+    // Example: Fetch from a hypothetical raw data table
+    const { data, error } = await supabase
+        .from('raw_reviews')
+        .select('*')
+        .is('processed_at', null)
+        .limit(50);
 
-async function generateSimulatedReviews(count = 50) {
-    const { data: outlets } = await supabase.from('outlets').select('id, name');
-
-    if (!outlets || outlets.length === 0) {
-        console.error('❌ No outlets found. Run seed-data.js first.');
-        process.exit(1);
+    if (error) {
+        console.error('❌ Failed to fetch real reviews:', error.message);
+        return [];
     }
-
-    const reviews = [];
-    for (let i = 0; i < count; i++) {
-        const outlet = outlets[Math.floor(Math.random() * outlets.length)];
-        const type = Math.random();
-
-        let comment, rating;
-
-        if (type < 0.6) { // 60% Positive
-            comment = POSITIVE_COMMENTS[Math.floor(Math.random() * POSITIVE_COMMENTS.length)];
-            rating = Math.floor(Math.random() * 2) + 4; // 4 or 5
-        } else if (type < 0.8) { // 20% Stock Issues
-            comment = STOCK_ISSUES[Math.floor(Math.random() * STOCK_ISSUES.length)];
-            rating = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
-        } else { // 20% Service Issues
-            comment = SERVICE_ISSUES[Math.floor(Math.random() * SERVICE_ISSUES.length)];
-            rating = Math.floor(Math.random() * 3) + 1;
-        }
-
-        reviews.push({
-            outlet_id: outlet.id,
-            reviewer_name: NAMES[Math.floor(Math.random() * NAMES.length)] + ' ' + Math.floor(Math.random() * 100),
-            rating,
-            comment,
-            outlet_name: outlet.name // Temp for logging
-        });
-    }
-    return reviews;
+    return data || [];
 }
 
 // --- Mega-Batching Analysis (Groq / Llama 3.3) ---
@@ -121,10 +83,15 @@ async function main() {
     console.log('🗣️ Review Sentiment Analyzer - Alpro Hub');
     console.log('========================================\n');
 
-    // 1. Simulate Data
-    console.log('Step 1: Generating 50 simulated reviews...');
-    const rawReviews = await generateSimulatedReviews(50);
-    console.log('✅ Generated.');
+    // 1. Fetch Real Data
+    console.log('Step 1: Fetching un-processed reviews from raw_reviews table...');
+    const rawReviews = await fetchRealReviews();
+
+    if (rawReviews.length === 0) {
+        console.log('ℹ️ No new reviews found to analyze. Exiting.');
+        return;
+    }
+    console.log(`✅ Found ${rawReviews.length} reviews.`);
 
     // 2. Analyze with Gemini
     const analysisResults = await analyzeReviewsMegaBatch(rawReviews);

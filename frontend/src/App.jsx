@@ -13,8 +13,19 @@ import {
     Activity,
     Zap,
     Eye,
-    ExternalLink
+    ExternalLink,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
+
+// ============================================================
+// HELPERS
+// ============================================================
+function getDateFilter(days = 7) {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString();
+}
 
 // ============================================================
 // COMPONENTS
@@ -45,8 +56,8 @@ function Sidebar({ activeTab, setActiveTab }) {
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === item.id
-                            ? 'bg-alpro-50 text-alpro-600 shadow-sm'
-                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                ? 'bg-alpro-50 text-alpro-600 shadow-sm'
+                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                             }`}
                     >
                         <item.icon className="w-5 h-5" />
@@ -94,7 +105,7 @@ function StatCard({ title, value, icon: Icon, subtitle, color = 'alpro' }) {
     );
 }
 
-// --- Smart Strategic Alerts (Score > 9) ---
+// --- Smart Strategic Alerts (Score > 9, last 7 days) ---
 function StrategicAlertsWidget() {
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -104,7 +115,8 @@ function StrategicAlertsWidget() {
             const { data, error } = await supabase
                 .from('market_trends')
                 .select('*')
-                .eq('is_viral', true) // score >= 9 items are marked viral
+                .eq('is_viral', true)
+                .gte('detected_at', getDateFilter(7))
                 .order('detected_at', { ascending: false })
                 .limit(8);
 
@@ -132,7 +144,7 @@ function StrategicAlertsWidget() {
                     Smart Strategic Alerts
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-1 bg-alpro-50 text-alpro-600 rounded-full uppercase tracking-wider">
-                    Score 9+
+                    Score 9+ • 7 Hari
                 </span>
             </div>
 
@@ -142,7 +154,7 @@ function StrategicAlertsWidget() {
                 ) : alerts.length === 0 ? (
                     <div className="p-8 text-center">
                         <Shield className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                        <p className="text-sm text-gray-400">No critical strategic alerts detected.</p>
+                        <p className="text-sm text-gray-400">No critical alerts in the last 7 days.</p>
                         <p className="text-xs text-gray-300 mt-1">Radar is actively scanning...</p>
                     </div>
                 ) : (
@@ -181,24 +193,43 @@ function StrategicAlertsWidget() {
     );
 }
 
-// --- Market Radar Cards ---
+// --- Market Radar Cards (with Pagination, last 7 days) ---
 function MarketRadarWidget() {
     const [trends, setTrends] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(0);
+    const [totalCount, setTotalCount] = useState(0);
+    const PAGE_SIZE = 6;
 
     useEffect(() => {
         async function fetchTrends() {
+            setLoading(true);
+            const from = page * PAGE_SIZE;
+            const to = from + PAGE_SIZE - 1;
+
+            // Get total count
+            const { count } = await supabase
+                .from('market_trends')
+                .select('*', { count: 'exact', head: true })
+                .gte('detected_at', getDateFilter(7));
+
+            setTotalCount(count || 0);
+
+            // Get paginated data
             const { data, error } = await supabase
                 .from('market_trends')
                 .select('*')
+                .gte('detected_at', getDateFilter(7))
                 .order('detected_at', { ascending: false })
-                .limit(12);
+                .range(from, to);
 
             if (!error) setTrends(data || []);
             setLoading(false);
         }
         fetchTrends();
-    }, []);
+    }, [page]);
+
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
     const getCategoryColor = (cat) => {
         const map = {
@@ -212,12 +243,33 @@ function MarketRadarWidget() {
 
     return (
         <div className="space-y-4">
-            <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-alpro-600" />
-                    Intelligence Feed
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">All classified items from strategic radar</p>
+            <div className="flex justify-between items-center">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <Eye className="w-5 h-5 text-alpro-600" />
+                        Intelligence Feed
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Data 7 hari terakhir • {totalCount} items</p>
+                </div>
+                {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setPage(p => Math.max(0, p - 1))}
+                            disabled={page === 0}
+                            className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs text-gray-500 font-medium">{page + 1} / {totalPages}</span>
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                            disabled={page >= totalPages - 1}
+                            className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -225,7 +277,7 @@ function MarketRadarWidget() {
                     <p className="text-gray-400">Scanning...</p>
                 ) : trends.length === 0 ? (
                     <div className="col-span-3 p-8 text-center text-gray-400 bg-white rounded-xl border border-dashed">
-                        No intelligence items yet. Run market-radar.js to populate.
+                        No intelligence items in the last 7 days.
                     </div>
                 ) : (
                     trends.map((trend) => (
@@ -266,16 +318,15 @@ function CompetitorSentimentWidget() {
 
     useEffect(() => {
         async function fetchCompetitorData() {
-            // Fetch COMPETITOR_MOVE items from market_trends
             const { data: items, error } = await supabase
                 .from('market_trends')
                 .select('*')
                 .eq('source_type', 'COMPETITOR_MOVE')
+                .gte('detected_at', getDateFilter(7))
                 .order('detected_at', { ascending: false })
                 .limit(20);
 
             if (!error && items) {
-                // Aggregate sentiment by competitor mentioned in title
                 const competitors = ['Kimia Farma', 'K24', 'Guardian', 'Watson', 'Roxy'];
                 const sentimentMap = competitors.map(name => {
                     const mentions = items.filter(i => i.title?.toLowerCase().includes(name.toLowerCase()));
@@ -293,10 +344,11 @@ function CompetitorSentimentWidget() {
 
     return (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-alpro-600" />
                 Competitor Radar
             </h3>
+            <p className="text-[10px] text-gray-300 mb-4">7 hari terakhir</p>
 
             {loading ? (
                 <p className="text-sm text-gray-400">Scanning competitor data...</p>
@@ -373,7 +425,7 @@ function SentimentWidget() {
             ) : stats.total === 0 ? (
                 <div className="text-center text-gray-400 py-6">
                     <p className="text-sm">No reviews analyzed yet.</p>
-                    <p className="text-xs mt-1">Run review-analyzer.js</p>
+                    <p className="text-xs mt-1">Connect a review source to start</p>
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -416,15 +468,28 @@ function SentimentWidget() {
     );
 }
 
-// --- Overview Stats ---
+// --- Overview Stats (last 7 days) ---
 function OverviewStats() {
     const [stats, setStats] = useState({ trends: 0, alerts: 0, reviews: 0 });
 
     useEffect(() => {
         async function fetchStats() {
-            const { count: trendsCount } = await supabase.from('market_trends').select('*', { count: 'exact', head: true });
-            const { count: alertsCount } = await supabase.from('market_trends').select('*', { count: 'exact', head: true }).eq('is_viral', true);
-            const { count: reviewsCount } = await supabase.from('review_sentiments').select('*', { count: 'exact', head: true });
+            const sevenDaysAgo = getDateFilter(7);
+
+            const { count: trendsCount } = await supabase
+                .from('market_trends')
+                .select('*', { count: 'exact', head: true })
+                .gte('detected_at', sevenDaysAgo);
+
+            const { count: alertsCount } = await supabase
+                .from('market_trends')
+                .select('*', { count: 'exact', head: true })
+                .eq('is_viral', true)
+                .gte('detected_at', sevenDaysAgo);
+
+            const { count: reviewsCount } = await supabase
+                .from('review_sentiments')
+                .select('*', { count: 'exact', head: true });
 
             setStats({
                 trends: trendsCount || 0,
@@ -438,17 +503,17 @@ function OverviewStats() {
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <StatCard
-                title="Intelligence Items"
+                title="Intelligence (7d)"
                 value={stats.trends}
                 icon={TrendingUp}
-                subtitle="From strategic radar"
+                subtitle="Last 7 days"
                 color="blue"
             />
             <StatCard
                 title="Critical Alerts"
                 value={stats.alerts}
                 icon={AlertTriangle}
-                subtitle="Score 9+ items"
+                subtitle="Score 9+ (7 days)"
                 color="red"
             />
             <StatCard
@@ -487,7 +552,7 @@ function App() {
                 <header className="flex justify-between items-center mb-6">
                     <div>
                         <h1 className="text-xl font-bold text-gray-900">Strategic Dashboard</h1>
-                        <p className="text-xs text-gray-400">Real-time intelligence for Apotek Alpro</p>
+                        <p className="text-xs text-gray-400">Real-time intelligence • Auto-updated daily 08:00 WIB</p>
                     </div>
                     <div className="flex items-center gap-3">
                         <button className="p-2 text-gray-400 hover:text-alpro-600 transition-colors relative">

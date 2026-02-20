@@ -119,9 +119,10 @@ INSTRUKSI:
 2. Berikan Impact Score (0-10) berdasarkan dampak terhadap bisnis apotek retail.
 3. HANYA kembalikan berita dengan Score > 7.
 4. Berikan recommendation yang actionable untuk tim operasional Alpro.
+5. WAJIB sertakan nomor urut berita ("index") dari daftar di atas.
 
 FORMAT OUTPUT JSON ARRAY MURNI:
-[{"title": "judul berita persis dari input", "category": "COMPETITOR_MOVE", "score": 9, "reason": "alasan singkat", "recommendation": "langkah aksi"}]
+[{"index": 1, "title": "judul berita", "category": "COMPETITOR_MOVE", "score": 9, "reason": "alasan singkat", "recommendation": "langkah aksi"}]
 Jika tidak ada yang relevan > 7, kembalikan array kosong [].`;
 
     try {
@@ -153,20 +154,20 @@ async function saveToSupabase(analyzedItems, originalItems) {
 
     console.log(`\n🔥 Saving ${analyzedItems.length} strategic intelligence items...`);
 
-    // Build a title→link lookup map from original items
-    const linkMap = new Map();
-    originalItems.forEach(item => {
-        linkMap.set(item.title, item.link || '');
-    });
+    const payload = analyzedItems.map(item => {
+        // Use index-based lookup (AI returns 1-based index)
+        const originalItem = originalItems[(item.index || 0) - 1];
+        const sourceUrl = originalItem?.link || '';
 
-    const payload = analyzedItems.map(item => ({
-        source_type: item.category,
-        title: item.title,
-        summary: `${item.reason} | Rekomendasi: ${item.recommendation}`,
-        sentiment_score: item.score / 10,
-        is_viral: item.score >= 9,
-        source_url: linkMap.get(item.title) || '',
-    }));
+        return {
+            source_type: item.category,
+            title: item.title,
+            summary: `${item.reason} | Rekomendasi: ${item.recommendation}`,
+            sentiment_score: item.score / 10,
+            is_viral: item.score >= 9,
+            source_url: sourceUrl,
+        };
+    });
 
     const { data, error } = await supabase.from('market_trends').insert(payload).select();
 
@@ -175,7 +176,8 @@ async function saveToSupabase(analyzedItems, originalItems) {
     } else {
         console.log(`✅ Saved ${data.length} items to market_trends.`);
         data.forEach((item, i) => {
-            console.log(`  ${i + 1}. [${item.source_type}] ${item.title.substring(0, 60)}...`);
+            console.log(`  ${i + 1}. [${item.source_type}] ${item.title.substring(0, 50)}...`);
+            console.log(`     🔗 ${item.source_url || '(no url)'}`);
         });
     }
 }
