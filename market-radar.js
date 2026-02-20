@@ -6,24 +6,41 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// RSS Feeds for Indonesian Health News
+// ============================================================
+// STRATEGIC RSS FEEDS - High Authority Sources
+// ============================================================
 const RSS_FEEDS = [
-    'https://news.google.com/rss/search?q=obat+apotek+Indonesia&hl=id&gl=ID&ceid=ID:id',
-    'https://news.google.com/rss/search?q=kesehatan+farmasi+Indonesia&hl=id&gl=ID&ceid=ID:id',
-    'https://news.google.com/rss/search?q=vitamin+suplemen+trend+Indonesia&hl=id&gl=ID&ceid=ID:id',
+    // BPOM (Recall & Press Releases)
+    { url: 'https://news.google.com/rss/search?q=site:pom.go.id+intitle:%22siaran+pers%22&hl=id&gl=ID&ceid=ID:id', label: 'BPOM Siaran Pers' },
+    { url: 'https://news.google.com/rss/search?q=site:pom.go.id+intitle:%22penjelasan+publik%22&hl=id&gl=ID&ceid=ID:id', label: 'BPOM Penjelasan Publik' },
+
+    // Kemenkes (Wabah & Regulasi)
+    { url: 'https://kemkes.go.id/id/rss/article/rilis-berita', label: 'Kemenkes Rilis' },
+    { url: 'https://pusatkrisis.kemkes.go.id/feed/rss.php?cat=eo', label: 'Kemenkes Krisis' },
+
+    // Competitor Watch
+    { url: 'https://news.google.com/rss/search?q=%22Kimia+Farma%22+OR+%22Apotek+K24%22+OR+%22Guardian%22+OR+%22Watson%22+OR+%22Apotek+Roxy%22&hl=id&gl=ID&ceid=ID:id', label: 'Competitor Watch' },
 ];
 
-// Keywords for Pre-Filtering (Case Insensitive)
-const HEALTH_KEYWORDS = [
-    'obat', 'apotek', 'farmasi', 'vitamin', 'suplemen', 'wabah', 'virus',
-    'penyakit', 'kemenkes', 'bpom', 'masker', 'vaksin', 'imun', 'herbal',
-    'diabetes', 'kolesterol', 'hipertensi', 'flu', 'batuk', 'demam', 'anak'
+// ============================================================
+// NOISE vs SIGNAL PROTOCOL
+// ============================================================
+const NOISE_KEYWORDS = [
+    'penghargaan', 'csr', 'ulang tahun', 'seremonial', 'mou',
+    'kunjungan kerja', 'lomba', 'wisuda', 'bakti sosial', 'donor darah'
 ];
 
-// --- RSS Parser (simple XML to items) ---
-async function fetchRSSFeed(url) {
+const SIGNAL_KEYWORDS = [
+    'tarik', 'recall', 'obat ilegal', 'klb', 'wabah', 'izin edar',
+    'kenaikan harga', 'akuisisi', 'cabang baru', 'promo', 'diskon',
+    'outbreak', 'pandemi', 'darurat', 'langka', 'ditarik', 'palsu',
+    'merger', 'ekspansi', 'tutup', 'bangkrut', 'regulasi baru'
+];
+
+// --- RSS Parser ---
+async function fetchRSSFeed(feedObj) {
     try {
-        const response = await fetch(url);
+        const response = await fetch(feedObj.url);
         const xml = await response.text();
 
         const items = [];
@@ -33,65 +50,95 @@ async function fetchRSSFeed(url) {
         while ((match = itemRegex.exec(xml)) !== null) {
             const itemXml = match[1];
             const title = (itemXml.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
-            const source = (itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1] || 'Google News';
+            const source = (itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1] || feedObj.label;
 
             if (title) {
                 items.push({
                     title: title.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
                     source: source.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
+                    feed_label: feedObj.label,
                 });
             }
         }
 
         return items;
     } catch (err) {
-        console.error(`  ⚠️ Failed to fetch RSS: ${url}`, err.message);
+        console.error(`  ⚠️ Failed to fetch [${feedObj.label}]: ${err.message}`);
         return [];
     }
 }
 
-// --- Mega-Batching Analysis ---
-async function analyzeMegaBatch(newsItems) {
+// --- Pre-AI Filter: Noise vs Signal ---
+function classifyNoiseSignal(items) {
+    const signals = [];
+    const noise = [];
+
+    for (const item of items) {
+        const titleLower = item.title.toLowerCase();
+
+        // Check if it's noise first
+        const isNoise = NOISE_KEYWORDS.some(kw => titleLower.includes(kw));
+        if (isNoise) {
+            noise.push(item);
+            continue;
+        }
+
+        // Check if it's a strong signal
+        const isSignal = SIGNAL_KEYWORDS.some(kw => titleLower.includes(kw));
+        item.is_priority_signal = isSignal;
+        signals.push(item);
+    }
+
+    return { signals, noise };
+}
+
+// --- Mega-Batch Strategic Analysis ---
+async function analyzeStrategicBatch(newsItems) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    // Create one giant list
-    const newsList = newsItems.map((item, index) => `${index + 1}. ${item.title} (Sumber: ${item.source})`).join('\n');
+    const newsList = newsItems.map((item, index) =>
+        `${index + 1}. [${item.feed_label}] ${item.title}`
+    ).join('\n');
 
     const prompt = `
-Kamu adalah Analis Pasar Farmasi senior untuk Apotek Alpro.
-Tugas: Analisa daftar berita berikut secara kolektif untuk menemukan potensi tren yang berdampak pada penjualan apotek.
+Kamu adalah Analis Strategi Farmasi senior untuk Apotek Alpro (200+ cabang, Jabodetabek & Bandung).
+Tugas: Klasifikasikan dan analisis daftar berita berikut secara kolektif.
+
+KATEGORI KLASIFIKASI:
+1. COMPETITOR_MOVE - Aktivitas kompetitor (ekspansi, promo, akuisisi, tutup cabang)
+2. REGULATORY_CHANGE - Perubahan regulasi BPOM/Kemenkes (izin edar, aturan baru, recall)
+3. PUBLIC_HEALTH_ISSUE - Isu kesehatan masyarakat (wabah, KLB, outbreak, pandemi)
+4. PRODUCT_SAFETY - Keamanan produk (obat palsu, obat ilegal, produk ditarik, recall)
 
 DAFTAR BERITA:
 ${newsList}
 
 INSTRUKSI:
-1. Filter berita yang TIDAK relevan dengan bisnis apotek retail (misal: kebijakan RS, politik kesehatan makro, kriminal).
-2. Fokus pada: wabah penyakit, tren obat/vitamin baru, gaya hidup sehat, atau kelangkaan produk.
-3. Berikan Impact Score (0-10).
-4. KEMBALIKAN HANYA BERITA DENGAN SCORE > 7.
+1. Analisis setiap berita dan tentukan kategorinya.
+2. Berikan Impact Score (0-10) berdasarkan dampak terhadap bisnis apotek retail.
+3. HANYA kembalikan berita dengan Score > 7.
+4. Berikan recommendation yang actionable untuk tim operasional Alpro.
 
 FORMAT OUTPUT HARUS JSON ARRAY MURNI (tanpa markdown code block):
 [
   {
-    "title": "judul berita persis sama dengan input",
+    "title": "judul berita persis dari input",
+    "category": "COMPETITOR_MOVE",
     "score": 9,
-    "reason": "alasan singkat kenapa impact tinggi",
-    "recommendation": "saran stok barang atau promosi"
+    "reason": "alasan singkat dampak bisnis",
+    "recommendation": "langkah aksi spesifik untuk Alpro"
   }
 ]
 Jika tidak ada yang relevan > 7, kembalikan array kosong [].
-  `;
+`;
 
     try {
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim();
-
-        // Clean up markdown if present
         const cleanText = text.replace(/```json|```/g, '').trim();
-
         return JSON.parse(cleanText);
     } catch (err) {
-        console.error('  ⚠️ Gemini Mega-Batch analysis failed:', err.message);
+        console.error('  ❌ Gemini Strategic Analysis failed:', err.message);
         return [];
     }
 }
@@ -99,17 +146,17 @@ Jika tidak ada yang relevan > 7, kembalikan array kosong [].
 // --- Save to Supabase ---
 async function saveToSupabase(analyzedItems) {
     if (analyzedItems.length === 0) {
-        console.log('\n📊 No high-impact trends found (score > 7).');
+        console.log('\n📊 No high-impact strategic items found (score > 7).');
         return;
     }
 
-    console.log(`\n🔥 Saving ${analyzedItems.length} high-impact trends...`);
+    console.log(`\n🔥 Saving ${analyzedItems.length} strategic intelligence items...`);
 
     const payload = analyzedItems.map(item => ({
-        source_type: 'RSS - AI Analysis',
+        source_type: item.category,
         title: item.title,
         summary: `${item.reason} | Rekomendasi: ${item.recommendation}`,
-        sentiment_score: 0.8, // Default positive for opportunities
+        sentiment_score: item.score / 10, // Normalize 0-10 to 0.0-1.0
         is_viral: item.score >= 9,
     }));
 
@@ -118,27 +165,28 @@ async function saveToSupabase(analyzedItems) {
     if (error) {
         console.error('❌ Failed to save to Supabase:', error);
     } else {
-        console.log(`✅ Success! Saved ${data.length} trends.`);
-        data.forEach((trend, i) => {
-            console.log(`  ${i + 1}. ${trend.title.substring(0, 50)}...`);
+        console.log(`✅ Saved ${data.length} items to market_trends.`);
+        data.forEach((item, i) => {
+            console.log(`  ${i + 1}. [${item.source_type}] ${item.title.substring(0, 60)}...`);
         });
     }
 }
 
 // --- Main ---
 async function main() {
-    console.log('📡 Market Radar (Mega-Batch Mode) - Alpro Intelligence Hub');
-    console.log('=======================================================\n');
+    console.log('🎯 Strategic Market Radar - Alpro Intelligence Hub');
+    console.log('===================================================\n');
 
-    // Step 1: Fetch RSS
-    console.log('Step 1: Fetching RSS feeds...');
+    // Step 1: Fetch all RSS Feeds
+    console.log('Step 1: Fetching Strategic RSS Feeds...');
     let allNews = [];
-    for (const feedUrl of RSS_FEEDS) {
-        const items = await fetchRSSFeed(feedUrl);
+    for (const feed of RSS_FEEDS) {
+        const items = await fetchRSSFeed(feed);
+        console.log(`  ✓ [${feed.label}] ${items.length} articles`);
         allNews = allNews.concat(items);
     }
 
-    // Deduplicate
+    // Deduplicate by title
     const seen = new Set();
     const uniqueNews = allNews.filter(item => {
         if (seen.has(item.title)) return false;
@@ -146,38 +194,51 @@ async function main() {
         return true;
     });
 
-    console.log(`  ✓ Raw Articles: ${uniqueNews.length}`);
+    console.log(`\n  📰 Total Unique Articles: ${uniqueNews.length}`);
 
-    // Step 2: Pre-Filter (Keyword Matching)
-    console.log('Step 2: Pre-Filtering (Keyword Cleaning)...');
-    const filteredNews = uniqueNews.filter(item => {
-        const text = item.title.toLowerCase();
-        return HEALTH_KEYWORDS.some(keyword => text.includes(keyword));
-    });
+    // Step 2: Noise vs Signal Pre-Filter
+    console.log('\nStep 2: Applying Noise vs Signal Filter...');
+    const { signals, noise } = classifyNoiseSignal(uniqueNews);
 
-    console.log(`  ✓ Relevant Articles: ${filteredNews.length} (Discarded ${uniqueNews.length - filteredNews.length} irrelevant/duplicate items)`);
+    const prioritySignals = signals.filter(s => s.is_priority_signal);
+    console.log(`  ✓ Signals:  ${signals.length} articles (${prioritySignals.length} high-priority)`);
+    console.log(`  ✗ Noise:    ${noise.length} articles discarded`);
 
-    if (filteredNews.length === 0) {
-        console.log('No relevant articles found after filtering. Exiting.');
+    if (signals.length === 0) {
+        console.log('\nNo signal articles found. Exiting.');
         return;
     }
 
-    // Limit to avoid Token Limit (Gemini Flash context window is large, but let's be safe with top 100)
-    const batch = filteredNews.slice(0, 100);
-    console.log(`\nStep 3: Sending Mega-Bundle (${batch.length} items) to Gemini...`);
+    // Limit batch size (top 100 signals, prioritize strong signals first)
+    const sortedSignals = [...signals].sort((a, b) => (b.is_priority_signal ? 1 : 0) - (a.is_priority_signal ? 1 : 0));
+    const batch = sortedSignals.slice(0, 100);
 
+    // Step 3: Strategic AI Analysis (Single API Call)
+    console.log(`\nStep 3: Sending Mega-Bundle (${batch.length} signals) to Gemini...`);
     const startTime = Date.now();
-    const analyzed = await analyzeMegaBatch(batch);
+    const analyzed = await analyzeStrategicBatch(batch);
     const duration = (Date.now() - startTime) / 1000;
 
-    console.log(`  ✓ AI Analysis Complete in ${duration}s`);
-    console.log(`  ✓ AI Identified ${analyzed.length} High-Impact Trends`);
+    console.log(`  ✓ AI Analysis Complete in ${duration.toFixed(1)}s`);
+    console.log(`  ✓ High-Impact Items Found: ${analyzed.length}`);
 
-    // Step 4: Save
+    // Log categories
+    if (analyzed.length > 0) {
+        const catCount = analyzed.reduce((acc, item) => {
+            acc[item.category] = (acc[item.category] || 0) + 1;
+            return acc;
+        }, {});
+        console.log('\n  📊 Category Breakdown:');
+        Object.entries(catCount).forEach(([cat, count]) => {
+            console.log(`     - ${cat}: ${count}`);
+        });
+    }
+
+    // Step 4: Save to Supabase
     await saveToSupabase(analyzed);
 
-    console.log('\n🏁 Operations Complete.');
-    console.log(`💡 RPD Savings: We processed ${batch.length} articles with just 1 API Call!`);
+    console.log('\n🏁 Strategic Radar Scan Complete.');
+    console.log(`💡 RPD Used: 1 API Call for ${batch.length} articles.`);
 }
 
 main();

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
 import {
@@ -6,39 +5,47 @@ import {
     LayoutDashboard,
     TrendingUp,
     AlertTriangle,
-    Package,
+    Shield,
     Menu,
     Bell,
-    Search,
-    UserCircle
+    UserCircle,
+    Target,
+    Activity,
+    Zap,
+    Eye
 } from 'lucide-react';
 
-// --- Components ---
+// ============================================================
+// COMPONENTS
+// ============================================================
 
 function Sidebar({ activeTab, setActiveTab }) {
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'inventory', label: 'Inventory', icon: Package },
-        { id: 'market-radar', label: 'Market Radar', icon: TrendingUp },
+        { id: 'radar', label: 'Market Radar', icon: TrendingUp },
+        { id: 'sentiment', label: 'Sentiment Map', icon: Activity },
     ];
 
     return (
-        <div className="w-64 bg-white border-r border-gray-200 h-screen fixed left-0 top-0 flex flex-col hidden md:flex z-50">
+        <div className="w-64 bg-white border-r border-gray-200 h-screen fixed left-0 top-0 flex-col hidden md:flex z-50">
             <div className="p-6 border-b border-gray-100 flex items-center gap-3">
                 <div className="w-8 h-8 bg-alpro-500 rounded-lg flex items-center justify-center">
-                    <Building2 className="text-white w-5 h-5" />
+                    <Target className="text-white w-5 h-5" />
                 </div>
-                <span className="font-bold text-xl text-gray-800">Alpro Hub</span>
+                <div>
+                    <span className="font-bold text-lg text-gray-800">Alpro Intel</span>
+                    <p className="text-[10px] text-gray-400 -mt-1">Strategic Hub</p>
+                </div>
             </div>
 
-            <nav className="flex-1 p-4 space-y-2">
+            <nav className="flex-1 p-4 space-y-1">
                 {menuItems.map((item) => (
                     <button
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === item.id
-                            ? 'bg-alpro-50 text-alpro-600'
-                            : 'text-gray-600 hover:bg-gray-50'
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === item.id
+                                ? 'bg-alpro-50 text-alpro-600 shadow-sm'
+                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                             }`}
                     >
                         <item.icon className="w-5 h-5" />
@@ -51,8 +58,8 @@ function Sidebar({ activeTab, setActiveTab }) {
                 <div className="flex items-center gap-3 px-4 py-2">
                     <UserCircle className="w-8 h-8 text-gray-400" />
                     <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-700">Hendri (Ops)</span>
-                        <span className="text-xs text-gray-500">Manager</span>
+                        <span className="text-sm font-medium text-gray-700">Hendri</span>
+                        <span className="text-xs text-gray-400">Ops Manager</span>
                     </div>
                 </div>
             </div>
@@ -60,45 +67,45 @@ function Sidebar({ activeTab, setActiveTab }) {
     );
 }
 
-function StatCard({ title, value, icon: Icon, trend, color = "blue" }) {
+// --- Stat Cards ---
+function StatCard({ title, value, icon: Icon, subtitle, color = 'alpro' }) {
+    const colorMap = {
+        alpro: { bg: 'bg-alpro-50', text: 'text-alpro-600' },
+        red: { bg: 'bg-red-50', text: 'text-red-600' },
+        blue: { bg: 'bg-blue-50', text: 'text-blue-600' },
+        green: { bg: 'bg-green-50', text: 'text-green-600' },
+    };
+    const c = colorMap[color] || colorMap.alpro;
+
     return (
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start">
                 <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
-                    <h3 className="text-2xl font-bold text-gray-900">{value}</h3>
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{title}</p>
+                    <h3 className="text-3xl font-bold text-gray-900">{value}</h3>
+                    {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
                 </div>
-                <div className={`p-2 rounded-lg bg-${color}-50`}>
-                    <Icon className={`w-5 h-5 text-${color}-600`} />
+                <div className={`p-2.5 rounded-lg ${c.bg}`}>
+                    <Icon className={`w-5 h-5 ${c.text}`} />
                 </div>
             </div>
-            {trend && (
-                <div className="mt-4 flex items-center text-xs">
-                    <span className="text-green-600 font-medium flex items-center">
-                        {trend}
-                    </span>
-                    <span className="text-gray-400 ml-2">vs last month</span>
-                </div>
-            )}
         </div>
     );
 }
 
-function ZStopWidget() {
+// --- Smart Strategic Alerts (Score > 9) ---
+function StrategicAlertsWidget() {
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function fetchAlerts() {
-            // In a real app, we would join with outlets table. For now fetching raw alerts.
-            // Simulating a join or fetching from system_alerts
             const { data, error } = await supabase
-                .from('system_alerts')
+                .from('market_trends')
                 .select('*')
-                .eq('alert_type', 'Z-STOP')
-                .eq('severity', 'CRITICAL')
-                .order('created_at', { ascending: false })
-                .limit(10);
+                .eq('is_viral', true) // score >= 9 items are marked viral
+                .order('detected_at', { ascending: false })
+                .limit(8);
 
             if (!error) setAlerts(data || []);
             setLoading(false);
@@ -106,62 +113,67 @@ function ZStopWidget() {
         fetchAlerts();
     }, []);
 
+    const getCategoryStyle = (cat) => {
+        const styles = {
+            'COMPETITOR_MOVE': { bg: 'bg-blue-50', text: 'text-blue-700', icon: '🏢' },
+            'REGULATORY_CHANGE': { bg: 'bg-amber-50', text: 'text-amber-700', icon: '📋' },
+            'PUBLIC_HEALTH_ISSUE': { bg: 'bg-red-50', text: 'text-red-700', icon: '🦠' },
+            'PRODUCT_SAFETY': { bg: 'bg-purple-50', text: 'text-purple-700', icon: '⚠️' },
+        };
+        return styles[cat] || { bg: 'bg-gray-50', text: 'text-gray-700', icon: '📰' };
+    };
+
     return (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div className="p-5 border-b border-gray-50 flex justify-between items-center">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-red-500" />
-                    Z-STOP Alerts (Critical)
+                    <Zap className="w-5 h-5 text-alpro-500" />
+                    Smart Strategic Alerts
                 </h3>
-                <span className="text-xs font-medium px-2 py-1 bg-red-50 text-red-600 rounded-full">
-                    Live Realtime
+                <span className="text-[10px] font-bold px-2 py-1 bg-alpro-50 text-alpro-600 rounded-full uppercase tracking-wider">
+                    Score 9+
                 </span>
             </div>
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-gray-500 uppercase bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3">Message</th>
-                            <th className="px-6 py-3">Sev</th>
-                            <th className="px-6 py-3">Time</th>
-                            <th className="px-6 py-3">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr><td colSpan="4" className="text-center py-4">Loading...</td></tr>
-                        ) : alerts.length === 0 ? (
-                            <tr><td colSpan="4" className="text-center py-4 text-gray-500">No critical alerts today.</td></tr>
-                        ) : (
-                            alerts.map((alert) => (
-                                <tr key={alert.id} className="border-b border-gray-50 hover:bg-gray-50">
-                                    <td className="px-6 py-4 font-medium text-gray-900 max-w-xs truncate" title={alert.message}>
-                                        {alert.message}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs font-bold">
-                                            {alert.severity}
+            <div className="divide-y divide-gray-50">
+                {loading ? (
+                    <div className="p-6 text-center text-gray-400">Loading intelligence...</div>
+                ) : alerts.length === 0 ? (
+                    <div className="p-8 text-center">
+                        <Shield className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                        <p className="text-sm text-gray-400">No critical strategic alerts detected.</p>
+                        <p className="text-xs text-gray-300 mt-1">Radar is actively scanning...</p>
+                    </div>
+                ) : (
+                    alerts.map((alert) => {
+                        const style = getCategoryStyle(alert.source_type);
+                        return (
+                            <div key={alert.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-start gap-3">
+                                    <span className="text-lg mt-0.5">{style.icon}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${style.bg} ${style.text} uppercase`}>
+                                                {alert.source_type?.replace('_', ' ')}
+                                            </span>
+                                        </div>
+                                        <h4 className="text-sm font-medium text-gray-900 line-clamp-2">{alert.title}</h4>
+                                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{alert.summary}</p>
+                                        <span className="text-[10px] text-gray-300 mt-2 block">
+                                            {new Date(alert.detected_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-gray-500">
-                                        {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <button className="text-alpro-600 font-medium hover:underline">
-                                            Investigate
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
         </div>
     );
 }
 
+// --- Market Radar Cards ---
 function MarketRadarWidget() {
     const [trends, setTrends] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -171,9 +183,8 @@ function MarketRadarWidget() {
             const { data, error } = await supabase
                 .from('market_trends')
                 .select('*')
-                .gt('is_viral', 'true') // Filter high impact / viral
                 .order('detected_at', { ascending: false })
-                .limit(9);
+                .limit(12);
 
             if (!error) setTrends(data || []);
             setLoading(false);
@@ -181,47 +192,49 @@ function MarketRadarWidget() {
         fetchTrends();
     }, []);
 
+    const getCategoryColor = (cat) => {
+        const map = {
+            'COMPETITOR_MOVE': 'border-l-blue-500',
+            'REGULATORY_CHANGE': 'border-l-amber-500',
+            'PUBLIC_HEALTH_ISSUE': 'border-l-red-500',
+            'PRODUCT_SAFETY': 'border-l-purple-500',
+        };
+        return map[cat] || 'border-l-gray-300';
+    };
+
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-end">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                        <TrendingUp className="w-6 h-6 text-alpro-600" />
-                        Market Radar
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">AI-detected high impact trends (Score &gt; 8)</p>
-                </div>
+            <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-alpro-600" />
+                    Intelligence Feed
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">All classified items from strategic radar</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {loading ? (
-                    <p>Loading Radar...</p>
+                    <p className="text-gray-400">Scanning...</p>
                 ) : trends.length === 0 ? (
-                    <div className="col-span-3 p-8 text-center text-gray-500 bg-white rounded-xl border border-dashed">
-                        No viral trends detected yet.
+                    <div className="col-span-3 p-8 text-center text-gray-400 bg-white rounded-xl border border-dashed">
+                        No intelligence items yet. Run market-radar.js to populate.
                     </div>
                 ) : (
                     trends.map((trend) => (
-                        <div key={trend.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex justify-between items-start mb-3">
-                                <span className="px-2 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded uppercase">
-                                    {trend.source_type}
+                        <div key={trend.id} className={`bg-white p-4 rounded-xl border border-gray-100 border-l-4 ${getCategoryColor(trend.source_type)} shadow-sm hover:shadow-md transition-shadow`}>
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                    {trend.source_type?.replace(/_/g, ' ')}
                                 </span>
                                 {trend.is_viral && (
-                                    <span className="flex items-center gap-1 text-xs font-bold text-red-500 animate-pulse">
-                                        🔥 Viral
-                                    </span>
+                                    <span className="text-[10px] font-bold text-red-500 animate-pulse">🔴 CRITICAL</span>
                                 )}
                             </div>
-                            <h4 className="font-bold text-gray-900 mb-2 line-clamp-2" title={trend.title}>
-                                {trend.title}
-                            </h4>
-                            <p className="text-sm text-gray-600 line-clamp-3 mb-4">
-                                {trend.summary}
-                            </p>
-                            <div className="pt-3 border-t border-gray-50 flex justify-between items-center text-xs text-gray-500">
-                                <span>{new Date(trend.detected_at).toLocaleDateString()}</span>
-                                <span className="font-medium text-alpro-600">Impact: High</span>
+                            <h4 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2">{trend.title}</h4>
+                            <p className="text-xs text-gray-500 line-clamp-2 mb-3">{trend.summary}</p>
+                            <div className="pt-2 border-t border-gray-50 flex justify-between items-center text-[10px] text-gray-300">
+                                <span>{new Date(trend.detected_at).toLocaleDateString('id-ID')}</span>
+                                <span className="font-medium text-alpro-500">Impact: {Math.round(trend.sentiment_score * 10)}/10</span>
                             </div>
                         </div>
                     ))
@@ -231,59 +244,83 @@ function MarketRadarWidget() {
     );
 }
 
-function OverviewWidgets() {
-    const [stats, setStats] = useState({ outlets: 0, alerts: 0, products: 0 });
+// --- Competitor Sentiment Map ---
+function CompetitorSentimentWidget() {
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        async function fetchStats() {
-            // Mocking optimistic counts for now to speed up UI dev
-            // In real world, use count() queries
-            const { count: outletsCount } = await supabase.from('outlets').select('*', { count: 'exact', head: true });
-            const { count: alertsCount } = await supabase.from('system_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false);
-            const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true });
+        async function fetchCompetitorData() {
+            // Fetch COMPETITOR_MOVE items from market_trends
+            const { data: items, error } = await supabase
+                .from('market_trends')
+                .select('*')
+                .eq('source_type', 'COMPETITOR_MOVE')
+                .order('detected_at', { ascending: false })
+                .limit(20);
 
-            setStats({
-                outlets: outletsCount || 0,
-                alerts: alertsCount || 0,
-                products: productsCount || 0
-            });
+            if (!error && items) {
+                // Aggregate sentiment by competitor mentioned in title
+                const competitors = ['Kimia Farma', 'K24', 'Guardian', 'Watson', 'Roxy'];
+                const sentimentMap = competitors.map(name => {
+                    const mentions = items.filter(i => i.title?.toLowerCase().includes(name.toLowerCase()));
+                    const avgSentiment = mentions.length > 0
+                        ? mentions.reduce((sum, m) => sum + (m.sentiment_score || 0), 0) / mentions.length
+                        : 0;
+                    return { name, mentions: mentions.length, sentiment: avgSentiment };
+                });
+                setData(sentimentMap);
+            }
+            setLoading(false);
         }
-        fetchStats();
+        fetchCompetitorData();
     }, []);
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard
-                title="Total Outlets"
-                value={stats.outlets}
-                icon={Building2}
-                color="blue"
-            />
-            <StatCard
-                title="Active Alerts"
-                value={stats.alerts}
-                icon={AlertTriangle}
-                color="red"
-            />
-            <StatCard
-                title="Total Products"
-                value={stats.products}
-                icon={Package}
-                color="orange"
-            />
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-alpro-600" />
+                Competitor Radar
+            </h3>
+
+            {loading ? (
+                <p className="text-sm text-gray-400">Scanning competitor data...</p>
+            ) : (
+                <div className="space-y-3">
+                    {data.map((comp) => (
+                        <div key={comp.name} className="flex items-center gap-3">
+                            <span className="text-xs font-medium text-gray-700 w-24 truncate">{comp.name}</span>
+                            <div className="flex-1">
+                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                    <div
+                                        className={`h-2 rounded-full transition-all duration-500 ${comp.sentiment > 0.5 ? 'bg-green-500' : comp.sentiment > 0.3 ? 'bg-amber-500' : 'bg-red-500'
+                                            }`}
+                                        style={{ width: `${Math.max(comp.sentiment * 100, 5)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                            <span className="text-[10px] text-gray-400 w-14 text-right">
+                                {comp.mentions} news
+                            </span>
+                        </div>
+                    ))}
+
+                    <div className="pt-3 mt-2 border-t border-gray-50">
+                        <p className="text-[10px] text-gray-300 text-center">Based on AI-analyzed news mentions</p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-// ... (previous code)
-
+// --- Customer Sentiment Widget ---
 function SentimentWidget() {
     const [stats, setStats] = useState({ positive: 0, stock: 0, service: 0, total: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function fetchSentiments() {
-            // Fetch aggregated counts
             const { data, error } = await supabase
                 .from('review_sentiments')
                 .select('sentiment_category');
@@ -310,53 +347,53 @@ function SentimentWidget() {
     const getPercent = (val) => stats.total === 0 ? 0 : Math.round((val / stats.total) * 100);
 
     return (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <UserCircle className="w-5 h-5 text-alpro-600" />
-                Customer Sentiment
+                <Activity className="w-5 h-5 text-alpro-600" />
+                Customer Pulse
             </h3>
 
             {loading ? (
-                <p>Loading...</p>
+                <p className="text-sm text-gray-400">Loading...</p>
             ) : stats.total === 0 ? (
-                <div className="text-center text-gray-500 py-8">No reviews analyzed yet.</div>
+                <div className="text-center text-gray-400 py-6">
+                    <p className="text-sm">No reviews analyzed yet.</p>
+                    <p className="text-xs mt-1">Run review-analyzer.js</p>
+                </div>
             ) : (
-                <div className="space-y-4">
-                    {/* Positive */}
+                <div className="space-y-3">
                     <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600">Positive Experience</span>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-500">Positive</span>
                             <span className="font-bold text-green-600">{getPercent(stats.positive)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
-                            <div className="bg-green-500 h-2 rounded-full" style={{ width: `${getPercent(stats.positive)}%` }}></div>
+                            <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${getPercent(stats.positive)}%` }}></div>
                         </div>
                     </div>
 
-                    {/* Stock Issues */}
                     <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600">Stock Issues</span>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-500">Stock Issues</span>
                             <span className="font-bold text-red-600">{getPercent(stats.stock)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
-                            <div className="bg-red-500 h-2 rounded-full" style={{ width: `${getPercent(stats.stock)}%` }}></div>
+                            <div className="bg-red-500 h-2 rounded-full transition-all" style={{ width: `${getPercent(stats.stock)}%` }}></div>
                         </div>
                     </div>
 
-                    {/* Service Issues */}
                     <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600">Service Issues</span>
-                            <span className="font-bold text-orange-600">{getPercent(stats.service)}%</span>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-500">Service Issues</span>
+                            <span className="font-bold text-alpro-500">{getPercent(stats.service)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
-                            <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${getPercent(stats.service)}%` }}></div>
+                            <div className="bg-alpro-500 h-2 rounded-full transition-all" style={{ width: `${getPercent(stats.service)}%` }}></div>
                         </div>
                     </div>
 
-                    <div className="pt-4 mt-4 border-t border-gray-50 text-center">
-                        <span className="text-xs text-gray-400">Based on {stats.total} AI-analyzed reviews</span>
+                    <div className="pt-3 border-t border-gray-50 text-center">
+                        <span className="text-[10px] text-gray-300">{stats.total} reviews analyzed by AI</span>
                     </div>
                 </div>
             )}
@@ -364,7 +401,55 @@ function SentimentWidget() {
     );
 }
 
-// --- Main Layout ---
+// --- Overview Stats ---
+function OverviewStats() {
+    const [stats, setStats] = useState({ trends: 0, alerts: 0, reviews: 0 });
+
+    useEffect(() => {
+        async function fetchStats() {
+            const { count: trendsCount } = await supabase.from('market_trends').select('*', { count: 'exact', head: true });
+            const { count: alertsCount } = await supabase.from('market_trends').select('*', { count: 'exact', head: true }).eq('is_viral', true);
+            const { count: reviewsCount } = await supabase.from('review_sentiments').select('*', { count: 'exact', head: true });
+
+            setStats({
+                trends: trendsCount || 0,
+                alerts: alertsCount || 0,
+                reviews: reviewsCount || 0
+            });
+        }
+        fetchStats();
+    }, []);
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <StatCard
+                title="Intelligence Items"
+                value={stats.trends}
+                icon={TrendingUp}
+                subtitle="From strategic radar"
+                color="blue"
+            />
+            <StatCard
+                title="Critical Alerts"
+                value={stats.alerts}
+                icon={AlertTriangle}
+                subtitle="Score 9+ items"
+                color="red"
+            />
+            <StatCard
+                title="Reviews Analyzed"
+                value={stats.reviews}
+                icon={Activity}
+                subtitle="AI-classified"
+                color="green"
+            />
+        </div>
+    );
+}
+
+// ============================================================
+// MAIN LAYOUT
+// ============================================================
 function App() {
     const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -376,45 +461,53 @@ function App() {
             <div className="md:hidden bg-white p-4 border-b border-gray-200 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-alpro-500 rounded-lg flex items-center justify-center">
-                        <Building2 className="text-white w-5 h-5" />
+                        <Target className="text-white w-5 h-5" />
                     </div>
-                    <span className="font-bold text-lg">Alpro Hub</span>
+                    <span className="font-bold text-lg">Alpro Intel</span>
                 </div>
                 <button className="text-gray-600"><Menu /></button>
             </div>
 
             <main className="md:ml-64 p-4 md:p-8">
-                <header className="flex justify-between items-center mb-8">
+                <header className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
-                        <p className="text-gray-500">Welcome back, Hendri!</p>
+                        <h1 className="text-xl font-bold text-gray-900">Strategic Dashboard</h1>
+                        <p className="text-xs text-gray-400">Real-time intelligence for Apotek Alpro</p>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                         <button className="p-2 text-gray-400 hover:text-alpro-600 transition-colors relative">
-                            <Bell className="w-6 h-6" />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                            <Bell className="w-5 h-5" />
+                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
                         </button>
                     </div>
                 </header>
 
                 {activeTab === 'dashboard' && (
-                    <div className="space-y-8">
-                        <OverviewWidgets />
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 space-y-8">
-                                <ZStopWidget />
+                    <div className="space-y-6">
+                        <OverviewStats />
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-2 space-y-6">
+                                <StrategicAlertsWidget />
                                 <MarketRadarWidget />
                             </div>
-                            <div>
+                            <div className="space-y-6">
+                                <CompetitorSentimentWidget />
                                 <SentimentWidget />
                             </div>
                         </div>
                     </div>
-                )} // ... (rest of the code)
+                )}
 
-                {activeTab !== 'dashboard' && (
-                    <div className="p-12 text-center border-2 border-dashed border-gray-200 rounded-xl">
-                        <p className="text-gray-500">Module <strong>{activeTab}</strong> is under construction.</p>
+                {activeTab === 'radar' && (
+                    <div className="space-y-6">
+                        <MarketRadarWidget />
+                    </div>
+                )}
+
+                {activeTab === 'sentiment' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <SentimentWidget />
+                        <CompetitorSentimentWidget />
                     </div>
                 )}
             </main>
