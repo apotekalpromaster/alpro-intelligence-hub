@@ -51,11 +51,13 @@ async function fetchRSSFeed(feedObj) {
         while ((match = itemRegex.exec(xml)) !== null) {
             const itemXml = match[1];
             const title = (itemXml.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
+            const link = (itemXml.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '';
             const source = (itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1] || feedObj.label;
 
             if (title) {
                 items.push({
                     title: title.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
+                    link: link.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
                     source: source.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
                     feed_label: feedObj.label,
                 });
@@ -143,7 +145,7 @@ Jika tidak ada yang relevan > 7, kembalikan array kosong [].`;
 }
 
 // --- Save to Supabase ---
-async function saveToSupabase(analyzedItems) {
+async function saveToSupabase(analyzedItems, originalItems) {
     if (analyzedItems.length === 0) {
         console.log('\n📊 No high-impact strategic items found (score > 7).');
         return;
@@ -151,12 +153,19 @@ async function saveToSupabase(analyzedItems) {
 
     console.log(`\n🔥 Saving ${analyzedItems.length} strategic intelligence items...`);
 
+    // Build a title→link lookup map from original items
+    const linkMap = new Map();
+    originalItems.forEach(item => {
+        linkMap.set(item.title, item.link || '');
+    });
+
     const payload = analyzedItems.map(item => ({
         source_type: item.category,
         title: item.title,
         summary: `${item.reason} | Rekomendasi: ${item.recommendation}`,
-        sentiment_score: item.score / 10, // Normalize 0-10 to 0.0-1.0
+        sentiment_score: item.score / 10,
         is_viral: item.score >= 9,
+        source_url: linkMap.get(item.title) || '',
     }));
 
     const { data, error } = await supabase.from('market_trends').insert(payload).select();
@@ -234,7 +243,7 @@ async function main() {
     }
 
     // Step 4: Save to Supabase
-    await saveToSupabase(analyzed);
+    await saveToSupabase(analyzed, batch);
 
     console.log('\n🏁 Strategic Radar Scan Complete.');
     console.log(`💡 RPD Used: 1 API Call for ${batch.length} articles.`);
