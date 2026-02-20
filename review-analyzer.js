@@ -1,10 +1,11 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 
 // --- Config ---
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const AI_MODEL = 'llama-3.3-70b-versatile';
 
 // --- Simulation Data ---
 const NAMES = ['Budi', 'Siti', 'Agus', 'Dewi', 'Rina', 'Joko', 'Tini', 'Bayu', 'Lestari', 'Hendra'];
@@ -67,18 +68,16 @@ async function generateSimulatedReviews(count = 50) {
     return reviews;
 }
 
-// --- Mega-Batching Analysis ---
+// --- Mega-Batching Analysis (Groq / Llama 3.3) ---
 async function analyzeReviewsMegaBatch(reviews) {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     // Bundle reviews into one text block
     const reviewsList = reviews.map((r, i) =>
         `Review #${i + 1}: "${r.comment}" (Rating: ${r.rating}/5)`
     ).join('\n');
 
-    const prompt = `
-Kamu adalah Customer Experience Manager Apotek Alpro.
-Tugas: Klasifikasikan 50 ulasan berikut ke dalam kategori sentimen operasional.
+    const systemPrompt = `Kamu adalah Customer Experience Manager Apotek Alpro. Kamu HANYA merespons dalam format JSON Array murni, tanpa teks tambahan atau markdown code block.`;
+
+    const userPrompt = `Klasifikasikan ${reviews.length} ulasan berikut ke dalam kategori sentimen operasional.
 
 KATEGORI TARGET:
 1. POSITIVE (Pujian, kepuasan, umum)
@@ -93,25 +92,27 @@ INSTRUKSI:
 - Abaikan rating angka, fokus pada teks.
 - Kembalikan JSON Array berisi klasifikasi untuk SETIAP review, urut sesuai input.
 
-FORMAT OUTPUT JSON:
-[
-  { "index": 1, "category": "POSITIVE" },
-  { "index": 2, "category": "STOK_ISSUE" },
-  ...
-]
-`;
+FORMAT OUTPUT JSON ARRAY MURNI:
+[{"index": 1, "category": "POSITIVE"}, {"index": 2, "category": "STOK_ISSUE"}, ...]`;
 
-    console.log(`\n🤖 Sending Mega-Batch of ${reviews.length} reviews to Gemini...`);
+    console.log(`\n🤖 Sending Mega-Batch of ${reviews.length} reviews to Groq (${AI_MODEL})...`);
 
     try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
-        const cleanText = text.replace(/```json|```/g, '').trim();
-        const analysis = JSON.parse(cleanText);
+        const chatCompletion = await groq.chat.completions.create({
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            model: AI_MODEL,
+            temperature: 0.2,
+            max_tokens: 4096,
+        });
 
-        return analysis; // Array of { index, category }
+        const text = chatCompletion.choices[0]?.message?.content?.trim() || '[]';
+        const cleanText = text.replace(/```json|```/g, '').trim();
+        return JSON.parse(cleanText);
     } catch (err) {
-        console.error('❌ Gemini Error:', err.message);
+        console.error('❌ Groq Error:', err.message);
         return [];
     }
 }

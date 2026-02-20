@@ -1,10 +1,11 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 
 // --- Config ---
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const AI_MODEL = 'llama-3.3-70b-versatile';
 
 // ============================================================
 // STRATEGIC RSS FEEDS - High Authority Sources
@@ -92,17 +93,15 @@ function classifyNoiseSignal(items) {
     return { signals, noise };
 }
 
-// --- Mega-Batch Strategic Analysis ---
+// --- Mega-Batch Strategic Analysis (Groq / Llama 3.3) ---
 async function analyzeStrategicBatch(newsItems) {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     const newsList = newsItems.map((item, index) =>
         `${index + 1}. [${item.feed_label}] ${item.title}`
     ).join('\n');
 
-    const prompt = `
-Kamu adalah Analis Strategi Farmasi senior untuk Apotek Alpro (200+ cabang, Jabodetabek & Bandung).
-Tugas: Klasifikasikan dan analisis daftar berita berikut secara kolektif.
+    const systemPrompt = `Kamu adalah Analis Strategi Farmasi senior untuk Apotek Alpro (200+ cabang, Jabodetabek & Bandung). Kamu HANYA merespons dalam format JSON Array murni, tanpa teks tambahan atau markdown code block.`;
+
+    const userPrompt = `Klasifikasikan dan analisis daftar berita berikut secara kolektif.
 
 KATEGORI KLASIFIKASI:
 1. COMPETITOR_MOVE - Aktivitas kompetitor (ekspansi, promo, akuisisi, tutup cabang)
@@ -119,26 +118,26 @@ INSTRUKSI:
 3. HANYA kembalikan berita dengan Score > 7.
 4. Berikan recommendation yang actionable untuk tim operasional Alpro.
 
-FORMAT OUTPUT HARUS JSON ARRAY MURNI (tanpa markdown code block):
-[
-  {
-    "title": "judul berita persis dari input",
-    "category": "COMPETITOR_MOVE",
-    "score": 9,
-    "reason": "alasan singkat dampak bisnis",
-    "recommendation": "langkah aksi spesifik untuk Alpro"
-  }
-]
-Jika tidak ada yang relevan > 7, kembalikan array kosong [].
-`;
+FORMAT OUTPUT JSON ARRAY MURNI:
+[{"title": "judul berita persis dari input", "category": "COMPETITOR_MOVE", "score": 9, "reason": "alasan singkat", "recommendation": "langkah aksi"}]
+Jika tidak ada yang relevan > 7, kembalikan array kosong [].`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
+        const chatCompletion = await groq.chat.completions.create({
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            model: AI_MODEL,
+            temperature: 0.3,
+            max_tokens: 4096,
+        });
+
+        const text = chatCompletion.choices[0]?.message?.content?.trim() || '[]';
         const cleanText = text.replace(/```json|```/g, '').trim();
         return JSON.parse(cleanText);
     } catch (err) {
-        console.error('  ❌ Gemini Strategic Analysis failed:', err.message);
+        console.error('  ❌ Groq Strategic Analysis failed:', err.message);
         return [];
     }
 }
@@ -214,7 +213,7 @@ async function main() {
     const batch = sortedSignals.slice(0, 100);
 
     // Step 3: Strategic AI Analysis (Single API Call)
-    console.log(`\nStep 3: Sending Mega-Bundle (${batch.length} signals) to Gemini...`);
+    console.log(`\nStep 3: Sending Mega-Bundle (${batch.length} signals) to Groq (${AI_MODEL})...`);
     const startTime = Date.now();
     const analyzed = await analyzeStrategicBatch(batch);
     const duration = (Date.now() - startTime) / 1000;
