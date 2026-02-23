@@ -56,8 +56,8 @@ function Sidebar({ activeTab, setActiveTab }) {
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === item.id
-                                ? 'bg-alpro-50 text-alpro-600 shadow-sm'
-                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                            ? 'bg-alpro-50 text-alpro-600 shadow-sm'
+                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                             }`}
                     >
                         <item.icon className="w-5 h-5" />
@@ -384,27 +384,37 @@ function CompetitorSentimentWidget() {
 // --- Customer Sentiment Widget ---
 function SentimentWidget() {
     const [stats, setStats] = useState({ positive: 0, stock: 0, service: 0, total: 0 });
+    const [recentReviews, setRecentReviews] = useState({ positive: [], stock: [], service: [] });
     const [loading, setLoading] = useState(true);
+    const [expandedCategory, setExpandedCategory] = useState(null);
 
     useEffect(() => {
         async function fetchSentiments() {
             const { data, error } = await supabase
                 .from('review_sentiments')
-                .select('sentiment_category');
+                .select('*')
+                .gte('created_at', getDateFilter(7))
+                .order('created_at', { ascending: false });
 
             if (!error && data) {
-                const counts = data.reduce((acc, curr) => {
-                    acc[curr.sentiment_category] = (acc[curr.sentiment_category] || 0) + 1;
-                    return acc;
-                }, {});
+                const counts = { POSITIVE: 0, STOK_ISSUE: 0, SERVICE_ISSUE: 0 };
+                const recent = { positive: [], stock: [], service: [] };
 
-                const total = data.length;
+                data.forEach(item => {
+                    counts[item.sentiment_category] = (counts[item.sentiment_category] || 0) + 1;
+
+                    if (item.sentiment_category === 'POSITIVE' && recent.positive.length < 2) recent.positive.push(item);
+                    if (item.sentiment_category === 'STOK_ISSUE' && recent.stock.length < 2) recent.stock.push(item);
+                    if (item.sentiment_category === 'SERVICE_ISSUE' && recent.service.length < 2) recent.service.push(item);
+                });
+
                 setStats({
                     positive: counts['POSITIVE'] || 0,
                     stock: counts['STOK_ISSUE'] || 0,
                     service: counts['SERVICE_ISSUE'] || 0,
-                    total
+                    total: data.length
                 });
+                setRecentReviews(recent);
             }
             setLoading(false);
         }
@@ -413,12 +423,35 @@ function SentimentWidget() {
 
     const getPercent = (val) => stats.total === 0 ? 0 : Math.round((val / stats.total) * 100);
 
+    const toggleExpand = (cat) => {
+        setExpandedCategory(expandedCategory === cat ? null : cat);
+    };
+
+    const ReviewList = ({ reviews }) => (
+        <div className="mt-2 space-y-2 pl-2 border-l-2 border-gray-100">
+            {reviews.length === 0 ? (
+                <p className="text-[10px] text-gray-400">No recent reviews available.</p>
+            ) : (
+                reviews.map(r => (
+                    <div key={r.id} className="bg-gray-50 p-2 rounded text-[10px]">
+                        <p className="font-medium text-gray-800">"{r.comment}"</p>
+                        <p className="text-gray-400 mt-1 flex justify-between">
+                            <span>{r.reviewer_name} • ★ {r.rating}</span>
+                            <span>{new Date(r.created_at).toLocaleDateString('id-ID')}</span>
+                        </p>
+                    </div>
+                ))
+            )}
+        </div>
+    );
+
     return (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
                 <Activity className="w-5 h-5 text-alpro-600" />
                 Customer Pulse
             </h3>
+            <p className="text-[10px] text-gray-400 mb-4">7 hari terakhir</p>
 
             {loading ? (
                 <p className="text-sm text-gray-400">Loading...</p>
@@ -428,39 +461,54 @@ function SentimentWidget() {
                     <p className="text-xs mt-1">Connect a review source to start</p>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                    {/* Positive */}
                     <div>
-                        <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500">Positive</span>
+                        <div
+                            className="flex justify-between text-xs mb-1 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => toggleExpand('positive')}
+                        >
+                            <span className="text-gray-500 font-medium">Positive <span className="text-[10px] text-gray-400 ml-1">(click for details)</span></span>
                             <span className="font-bold text-green-600">{getPercent(stats.positive)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                             <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${getPercent(stats.positive)}%` }}></div>
                         </div>
+                        {expandedCategory === 'positive' && <ReviewList reviews={recentReviews.positive} />}
                     </div>
 
+                    {/* Stock Issues */}
                     <div>
-                        <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500">Stock Issues</span>
+                        <div
+                            className="flex justify-between text-xs mb-1 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => toggleExpand('stock')}
+                        >
+                            <span className="text-gray-500 font-medium">Stock Issues <span className="text-[10px] text-gray-400 ml-1">(click for details)</span></span>
                             <span className="font-bold text-red-600">{getPercent(stats.stock)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                             <div className="bg-red-500 h-2 rounded-full transition-all" style={{ width: `${getPercent(stats.stock)}%` }}></div>
                         </div>
+                        {expandedCategory === 'stock' && <ReviewList reviews={recentReviews.stock} />}
                     </div>
 
+                    {/* Service Issues */}
                     <div>
-                        <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500">Service Issues</span>
+                        <div
+                            className="flex justify-between text-xs mb-1 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => toggleExpand('service')}
+                        >
+                            <span className="text-gray-500 font-medium">Service Issues <span className="text-[10px] text-gray-400 ml-1">(click for details)</span></span>
                             <span className="font-bold text-alpro-500">{getPercent(stats.service)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                             <div className="bg-alpro-500 h-2 rounded-full transition-all" style={{ width: `${getPercent(stats.service)}%` }}></div>
                         </div>
+                        {expandedCategory === 'service' && <ReviewList reviews={recentReviews.service} />}
                     </div>
 
                     <div className="pt-3 border-t border-gray-50 text-center">
-                        <span className="text-[10px] text-gray-300">{stats.total} reviews analyzed by AI</span>
+                        <span className="text-[10px] text-gray-300">{stats.total} reviews analyzed by AI in last 7 days</span>
                     </div>
                 </div>
             )}

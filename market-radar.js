@@ -53,14 +53,27 @@ async function fetchRSSFeed(feedObj) {
             const title = (itemXml.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
             const link = (itemXml.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '';
             const source = (itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1] || feedObj.label;
+            const pubDateStr = (itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1] || '';
 
             if (title) {
-                items.push({
-                    title: title.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
-                    link: link.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
-                    source: source.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
-                    feed_label: feedObj.label,
-                });
+                let isValidDate = true;
+                if (pubDateStr) {
+                    const pubDate = new Date(pubDateStr);
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    if (pubDate < sevenDaysAgo) {
+                        isValidDate = false; // Discard older than 7 days
+                    }
+                }
+
+                if (isValidDate) {
+                    items.push({
+                        title: title.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
+                        link: link.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
+                        source: source.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
+                        feed_label: feedObj.label,
+                    });
+                }
             }
         }
 
