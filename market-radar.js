@@ -94,7 +94,9 @@ function classifyNoiseSignal(items) {
 
         // Check if it's noise first
         const isNoise = NOISE_KEYWORDS.some(kw => titleLower.includes(kw));
-        if (isNoise) {
+
+        // Bypass noise filter for Competitor Watch to capture all competitor news
+        if (isNoise && item.feed_label !== 'Competitor Watch') {
             noise.push(item);
             continue;
         }
@@ -119,10 +121,11 @@ async function analyzeStrategicBatch(newsItems) {
     const userPrompt = `Klasifikasikan dan analisis daftar berita berikut secara kolektif.
 
 KATEGORI KLASIFIKASI:
-1. COMPETITOR_MOVE - Aktivitas kompetitor (ekspansi, promo, akuisisi, tutup cabang)
+1. COMPETITOR_MOVE - Aktivitas kompetitor strategis (ekspansi, promo besar, akuisisi, tutup cabang)
 2. REGULATORY_CHANGE - Perubahan regulasi BPOM/Kemenkes (izin edar, aturan baru, recall)
 3. PUBLIC_HEALTH_ISSUE - Isu kesehatan masyarakat (wabah, KLB, outbreak, pandemi)
 4. PRODUCT_SAFETY - Keamanan produk (obat palsu, obat ilegal, produk ditarik, recall)
+5. COMPETITOR_UPDATE - Berita umum kompetitor (CSR, penghargaan, liputan acara biasa)
 
 DAFTAR BERITA:
 ${newsList}
@@ -130,13 +133,14 @@ ${newsList}
 INSTRUKSI:
 1. Analisis setiap berita dan tentukan kategorinya.
 2. Berikan Impact Score (0-10) berdasarkan dampak terhadap bisnis apotek retail.
-3. HANYA kembalikan berita dengan Score > 7.
-4. Berikan recommendation yang actionable untuk tim operasional Alpro.
-5. WAJIB sertakan nomor urut berita ("index") dari daftar di atas.
+3. Untuk Kategori 1-4, HANYA kembalikan berita dengan Score > 7.
+4. KHUSUS Kategori 5 (COMPETITOR_UPDATE), kembalikan SEMUA berita yang masuk kategori ini, dengan Score berapapun.
+5. Berikan recommendation yang actionable (boleh kosong untuk COMPETITOR_UPDATE).
+6. WAJIB sertakan nomor urut berita ("index") dari daftar di atas.
 
 FORMAT OUTPUT JSON ARRAY MURNI:
 [{"index": 1, "title": "judul berita", "category": "COMPETITOR_MOVE", "score": 9, "reason": "alasan singkat", "recommendation": "langkah aksi"}]
-Jika tidak ada yang relevan > 7, kembalikan array kosong [].`;
+Jika tidak ada yang relevan untuk dikembalikan, kembalikan array kosong [].`;
 
     try {
         const chatCompletion = await groq.chat.completions.create({

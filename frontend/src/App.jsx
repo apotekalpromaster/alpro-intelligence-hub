@@ -315,16 +315,17 @@ function MarketRadarWidget() {
 function CompetitorSentimentWidget() {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [expandedComp, setExpandedComp] = useState(null);
 
     useEffect(() => {
         async function fetchCompetitorData() {
             const { data: items, error } = await supabase
                 .from('market_trends')
                 .select('*')
-                .eq('source_type', 'COMPETITOR_MOVE')
+                .in('source_type', ['COMPETITOR_MOVE', 'COMPETITOR_UPDATE'])
                 .gte('detected_at', getDateFilter(7))
                 .order('detected_at', { ascending: false })
-                .limit(20);
+                .limit(50);
 
             if (!error && items) {
                 const competitors = ['Kimia Farma', 'K24', 'Guardian', 'Watson', 'Roxy'];
@@ -333,7 +334,7 @@ function CompetitorSentimentWidget() {
                     const avgSentiment = mentions.length > 0
                         ? mentions.reduce((sum, m) => sum + (m.sentiment_score || 0), 0) / mentions.length
                         : 0;
-                    return { name, mentions: mentions.length, sentiment: avgSentiment };
+                    return { name, mentionsCount: mentions.length, sentiment: avgSentiment, mentions };
                 });
                 setData(sentimentMap);
             }
@@ -341,6 +342,10 @@ function CompetitorSentimentWidget() {
         }
         fetchCompetitorData();
     }, []);
+
+    const toggleExpand = (compName) => {
+        setExpandedComp(expandedComp === compName ? null : compName);
+    };
 
     return (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -355,20 +360,45 @@ function CompetitorSentimentWidget() {
             ) : (
                 <div className="space-y-3">
                     {data.map((comp) => (
-                        <div key={comp.name} className="flex items-center gap-3">
-                            <span className="text-xs font-medium text-gray-700 w-24 truncate">{comp.name}</span>
-                            <div className="flex-1">
-                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                    <div
-                                        className={`h-2 rounded-full transition-all duration-500 ${comp.sentiment > 0.5 ? 'bg-green-500' : comp.sentiment > 0.3 ? 'bg-amber-500' : 'bg-red-500'
-                                            }`}
-                                        style={{ width: `${Math.max(comp.sentiment * 100, 5)}%` }}
-                                    ></div>
+                        <div key={comp.name}>
+                            <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1 rounded" onClick={() => toggleExpand(comp.name)}>
+                                <span className="text-xs font-medium text-gray-700 w-24 truncate">{comp.name}</span>
+                                <div className="flex-1">
+                                    <div className="w-full bg-gray-100 rounded-full h-2">
+                                        <div
+                                            className={`h-2 rounded-full transition-all duration-500 ${comp.sentiment > 0.5 ? 'bg-green-500' : comp.sentiment > 0.3 ? 'bg-amber-500' : 'bg-red-500'
+                                                }`}
+                                            style={{ width: `${Math.max(comp.sentiment * 100, 5)}%` }}
+                                        ></div>
+                                    </div>
                                 </div>
+                                <span className="text-[10px] text-gray-400 w-28 text-right">
+                                    {comp.mentionsCount} news <span className="text-gray-300 ml-1">(click)</span>
+                                </span>
                             </div>
-                            <span className="text-[10px] text-gray-400 w-14 text-right">
-                                {comp.mentions} news
-                            </span>
+                            {expandedComp === comp.name && (
+                                <div className="mt-2 space-y-2 pl-2 border-l-2 border-gray-100 mb-2">
+                                    {comp.mentions.length === 0 ? (
+                                        <p className="text-[10px] text-gray-400">No recent news available.</p>
+                                    ) : (
+                                        comp.mentions.map(m => (
+                                            <div key={m.id} className="bg-gray-50 p-2 rounded text-[10px]">
+                                                {m.source_type === 'COMPETITOR_MOVE' && <span className="text-[9px] font-bold text-alpro-600 bg-alpro-50 px-1 py-0.5 rounded mr-1 inline-block mb-1">STRATEGIC HIGHLIGHT</span>}
+                                                <h4 className="font-medium text-gray-800 line-clamp-2">
+                                                    {m.source_url ? (
+                                                        <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="hover:text-alpro-600 hover:underline inline-flex items-center gap-1">
+                                                            {m.title} <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                                        </a>
+                                                    ) : m.title}
+                                                </h4>
+                                                <p className="text-gray-400 mt-1 flex justify-between">
+                                                    <span>{new Date(m.detected_at).toLocaleDateString('id-ID')}</span>
+                                                </p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ))}
 
@@ -434,9 +464,15 @@ function SentimentWidget() {
             ) : (
                 reviews.map(r => (
                     <div key={r.id} className="bg-gray-50 p-2 rounded text-[10px]">
-                        <p className="font-medium text-gray-800">"{r.comment}"</p>
+                        <p className="font-medium text-gray-800">
+                            {r.source_url ? (
+                                <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="hover:text-alpro-600 hover:underline inline-flex items-center gap-1">
+                                    "{r.comment}" <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                </a>
+                            ) : `"${r.comment}"`}
+                        </p>
                         <p className="text-gray-400 mt-1 flex justify-between">
-                            <span>{r.reviewer_name} • ★ {r.rating}</span>
+                            <span>{r.reviewer_name || 'Anonymous'} • ★ {r.rating}</span>
                             <span>{new Date(r.created_at).toLocaleDateString('id-ID')}</span>
                         </p>
                     </div>
