@@ -66,14 +66,10 @@ function Sidebar({ activeTab, setActiveTab }) {
                 ))}
             </nav>
 
-            <div className="p-4 border-t border-gray-100">
-                <div className="flex items-center gap-3 px-4 py-2">
-                    <UserCircle className="w-8 h-8 text-gray-400" />
-                    <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-700">Hendri</span>
-                        <span className="text-xs text-gray-400">Ops Manager</span>
-                    </div>
-                </div>
+            <div className="p-4 border-t border-gray-100 flex items-center justify-center">
+                <p className="text-[10px] text-gray-400 text-center uppercase tracking-wider">
+                    &copy; 2026 Dept. OASIS<br />Apotek Alpro Indonesia
+                </p>
             </div>
         </div>
     );
@@ -199,6 +195,8 @@ function MarketRadarWidget() {
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(0);
     const [totalCount, setTotalCount] = useState(0);
+    const [category, setCategory] = useState('ALL');
+    const [minScore, setMinScore] = useState(0);
     const PAGE_SIZE = 6;
 
     useEffect(() => {
@@ -208,26 +206,33 @@ function MarketRadarWidget() {
             const to = from + PAGE_SIZE - 1;
 
             // Get total count
-            const { count } = await supabase
+            let countQuery = supabase
                 .from('market_trends')
                 .select('*', { count: 'exact', head: true })
                 .gte('detected_at', getDateFilter(7));
 
+            if (category !== 'ALL') countQuery = countQuery.eq('source_type', category);
+            if (minScore > 0) countQuery = countQuery.gte('sentiment_score', minScore / 10);
+
+            const { count } = await countQuery;
             setTotalCount(count || 0);
 
             // Get paginated data
-            const { data, error } = await supabase
+            let dataQuery = supabase
                 .from('market_trends')
                 .select('*')
                 .gte('detected_at', getDateFilter(7))
                 .order('detected_at', { ascending: false })
                 .range(from, to);
 
-            if (!error) setTrends(data || []);
+            if (category !== 'ALL') dataQuery = dataQuery.eq('source_type', category);
+            if (minScore > 0) dataQuery = dataQuery.gte('sentiment_score', minScore / 10);
+
+            const { data, error } = await dataQuery;
             setLoading(false);
         }
         fetchTrends();
-    }, [page]);
+    }, [page, category, minScore]);
 
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -249,7 +254,33 @@ function MarketRadarWidget() {
                         <Eye className="w-5 h-5 text-alpro-600" />
                         Intelligence Feed
                     </h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Data 7 hari terakhir • {totalCount} items</p>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
+                        <select
+                            value={category}
+                            onChange={e => { setCategory(e.target.value); setPage(0); }}
+                            className="text-xs border border-gray-200 rounded p-1.5 text-gray-600 bg-white"
+                        >
+                            <option value="ALL">Semua Kategori</option>
+                            <option value="COMPETITOR_MOVE">Competitor Move</option>
+                            <option value="COMPETITOR_UPDATE">Competitor Update</option>
+                            <option value="REGULATORY_CHANGE">Regulatory Change</option>
+                            <option value="PUBLIC_HEALTH_ISSUE">Public Health Issue</option>
+                            <option value="PRODUCT_SAFETY">Product Safety</option>
+                        </select>
+                        <select
+                            value={minScore}
+                            onChange={e => { setMinScore(Number(e.target.value)); setPage(0); }}
+                            className="text-xs border border-gray-200 rounded p-1.5 text-gray-600 bg-white"
+                        >
+                            <option value={0}>Semua Score</option>
+                            <option value={7}>Score &gt; 7 (High)</option>
+                            <option value={8}>Score &gt; 8 (Very High)</option>
+                            <option value={9}>Score &gt; 9 (Critical)</option>
+                        </select>
+                    </div>
+
+                    <p className="text-xs text-gray-400 mt-2">Data 7 hari terakhir • {totalCount} items</p>
                 </div>
                 {totalPages > 1 && (
                     <div className="flex items-center gap-2">
