@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const Groq = require('groq-sdk');
+const { sendStrategicAlert } = require('./mailer');
 
 // --- Config ---
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
@@ -263,6 +264,15 @@ async function main() {
 
     // Step 4: Save to Supabase
     await saveToSupabase(analyzed, batch);
+
+    // Step 5: Send Email Alert for High-Impact Items (score > 7)
+    const highImpactItems = analyzed.filter(item => item.score > 7);
+    if (highImpactItems.length > 0) {
+        console.log(`\nStep 5: Sending Email Alert for ${highImpactItems.length} high-impact items...`);
+        await sendStrategicAlert(highImpactItems);
+    } else {
+        console.log('\nStep 5: No high-impact items (score > 7) to send alert for.');
+    }
 
     console.log('\n🏁 Strategic Radar Scan Complete.');
     console.log(`💡 RPD Used: 1 API Call for ${batch.length} articles.`);

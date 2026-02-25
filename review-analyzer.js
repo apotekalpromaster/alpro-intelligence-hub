@@ -5,6 +5,7 @@ const Groq = require('groq-sdk');
 // --- Config ---
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const { sendCustomerPulseAlert } = require('./mailer');
 const AI_MODEL = 'llama-3.3-70b-versatile';
 
 // --- Simulation Data ---
@@ -136,6 +137,9 @@ async function main() {
         console.log(`   - POSITIVE: ${counts['POSITIVE'] || 0}`);
         console.log(`   - STOK_ISSUE: ${counts['STOK_ISSUE'] || 0} 🔴`);
         console.log(`   - SERVICE_ISSUE: ${counts['SERVICE_ISSUE'] || 0} 🟠`);
+
+        console.log(`\nStep 4: Sending Customer Pulse Alert Email...`);
+        await sendCustomerPulseAlert(payload);
     }
 }
 
