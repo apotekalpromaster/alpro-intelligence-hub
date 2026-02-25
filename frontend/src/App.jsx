@@ -229,6 +229,7 @@ function MarketRadarWidget() {
             if (minScore > 0) dataQuery = dataQuery.gte('sentiment_score', minScore / 10);
 
             const { data, error } = await dataQuery;
+            if (!error) setTrends(data || []);
             setLoading(false);
         }
         fetchTrends();
@@ -359,13 +360,20 @@ function CompetitorSentimentWidget() {
                 .limit(50);
 
             if (!error && items) {
-                const competitors = ['Kimia Farma', 'K24', 'Guardian', 'Watson', 'Roxy'];
-                const sentimentMap = competitors.map(name => {
-                    const mentions = items.filter(i => i.title?.toLowerCase().includes(name.toLowerCase()));
+                const competitors = [
+                    { label: 'Kimia Farma', match: 'kimia farma' },
+                    { label: 'K24', match: 'k24' },
+                    { label: 'Guardian', match: 'apotek guardian' },
+                    { label: 'Watson', match: 'apotek watson' },
+                    { label: 'Roxy', match: 'apotek roxy' }
+                ];
+
+                const sentimentMap = competitors.map(compInfo => {
+                    const mentions = items.filter(i => i.title?.toLowerCase().includes(compInfo.match));
                     const avgSentiment = mentions.length > 0
                         ? mentions.reduce((sum, m) => sum + (m.sentiment_score || 0), 0) / mentions.length
                         : 0;
-                    return { name, mentionsCount: mentions.length, sentiment: avgSentiment, mentions };
+                    return { name: compInfo.label, mentionsCount: mentions.length, sentiment: avgSentiment, mentions };
                 });
                 setData(sentimentMap);
             }
