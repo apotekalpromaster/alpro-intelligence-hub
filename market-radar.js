@@ -20,8 +20,8 @@ const RSS_FEEDS = [
     { url: 'https://kemkes.go.id/id/rss/article/rilis-berita', label: 'Kemenkes Rilis' },
     { url: 'https://pusatkrisis.kemkes.go.id/feed/rss.php?cat=eo', label: 'Kemenkes Krisis' },
 
-    // Competitor Watch
-    { url: 'https://news.google.com/rss/search?q=%22Kimia+Farma%22+OR+%22Apotek+K24%22+OR+%22Guardian%22+OR+%22Watson%22+OR+%22Apotek+Roxy%22&hl=id&gl=ID&ceid=ID:id', label: 'Competitor Watch' },
+    // Competitor Watch (Termasuk Pemantauan Brand Sendiri: Apotek Alpro)
+    { url: 'https://news.google.com/rss/search?q=%22Kimia+Farma%22+OR+%22Apotek+K24%22+OR+%22Guardian%22+OR+%22Watson%22+OR+%22Apotek+Roxy%22+OR+%22Apotek+Alpro%22&hl=id&gl=ID&ceid=ID:id', label: 'Competitor Watch' },
 ];
 
 // ============================================================
