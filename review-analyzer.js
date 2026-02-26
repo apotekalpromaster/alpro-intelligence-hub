@@ -66,16 +66,18 @@ async function scrapeGoogleMapReviews() {
 
             // 4. Filter and prepare new reviews
             for (const r of placeData.reviews) {
-                if (!r.text) continue; // Skip reviews without comments
+                // If there's no text, we will synthesize one based on rating
+                const reviewText = r.text || `(Hanya Rating Bintang ${r.rating}/5)`;
 
-                const uniqueKey = `${r.author_name}_${r.text}`.toLowerCase();
+                const uniqueKey = `${r.author_name}_${reviewText}`.toLowerCase();
                 if (!existingSet.has(uniqueKey)) {
                     newReviews.push({
                         outlet_id: outlet.id,
                         reviewer_name: r.author_name,
                         rating: r.rating,
-                        comment: r.text,
-                        source_url: r.author_url || placeData.url
+                        comment: reviewText,
+                        source_url: r.author_url || placeData.url,
+                        is_textless: !r.text // Flag to bypass AI processing
                     });
                 }
             }
@@ -150,30 +152,52 @@ async function main() {
     }
     console.log(`✅ Scraped ${rawReviews.length} new unique reviews.`);
 
-    // 2. Analyze with Gemini
-    const analysisResults = await analyzeReviewsMegaBatch(rawReviews);
+    // Split reviews into those needing AI (has text) and those textless (auto-classify)
+    const needsAI = rawReviews.filter(r => !r.is_textless);
+    const noText = rawReviews.filter(r => r.is_textless);
 
-    if (analysisResults.length === 0) {
-        console.log('❌ Analysis failed or returned empty.');
-        return;
+    let analysisResults = [];
+    if (needsAI.length > 0) {
+        // 2. Analyze with Gemini/Groq
+        analysisResults = await analyzeReviewsMegaBatch(needsAI);
     }
 
-    console.log(`✅ AI Classification Complete. Received ${analysisResults.length} results.`);
+    console.log(`✅ AI Classification Complete for ${needsAI.length} text reviews. Auto-classified ${noText.length} star-only reviews.`);
 
     // 3. Merge & Save
     console.log('\nStep 3: Merging & Saving to Supabase...');
 
-    // Map analysis back to raw reviews (assuming order is preserved, or use ID logic in real app)
-    const payload = rawReviews.map((review, i) => {
-        const result = analysisResults.find(r => r.index === i + 1);
+    // Map analysis back to raw reviews
+    const payload = rawReviews.map((review) => {
+        let finalCategory = 'NEUTRAL';
+        let finalScore = 0.5;
+
+        if (review.is_textless) {
+            // Auto-classify based on stars
+            if (review.rating >= 4) {
+                finalCategory = 'POSITIVE';
+                finalScore = 0.9;
+            } else {
+                finalCategory = 'SERVICE_ISSUE'; // Default negative assumption for pharmacy
+                finalScore = 0.2;
+            }
+        } else {
+            // Find result from AI using mapped index based on `needsAI` array order
+            const aiIndex = needsAI.findIndex(n => n.reviewer_name === review.reviewer_name && n.comment === review.comment) + 1;
+            const result = analysisResults.find(r => r.index === aiIndex);
+
+            finalCategory = result ? result.category : 'NEUTRAL';
+            finalScore = result && result.category === 'POSITIVE' ? 0.9 : 0.2;
+        }
+
         return {
             outlet_id: review.outlet_id,
             reviewer_name: review.reviewer_name,
             rating: review.rating,
             comment: review.comment,
             source_url: review.source_url,
-            sentiment_category: result ? result.category : 'NEUTRAL',
-            sentiment_score: result && result.category === 'POSITIVE' ? 0.9 : 0.2 // Simplified score
+            sentiment_category: finalCategory,
+            sentiment_score: finalScore
         };
     });
 
