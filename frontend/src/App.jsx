@@ -361,6 +361,7 @@ function CompetitorSentimentWidget() {
 
             if (!error && items) {
                 const competitors = [
+                    { label: 'Apotek Alpro', match: 'apotek alpro' },
                     { label: 'Kimia Farma', match: 'kimia farma' },
                     { label: 'K24', match: 'k24' },
                     { label: 'Guardian', match: 'apotek guardian' },
