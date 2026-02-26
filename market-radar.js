@@ -222,11 +222,34 @@ async function main() {
         return true;
     });
 
-    console.log(`\n  📰 Total Unique Articles: ${uniqueNews.length}`);
+    console.log(`\n  📰 Total Unique Articles (Current Batch): ${uniqueNews.length}`);
+
+    // Step 1.5: Identify Historics (Deduplicate against Supabase past 7 days)
+    console.log('\nStep 1.5: Checking Database for existing news...');
+
+    // Fetch titles of existing market trends from last 7 days
+    const sevenDaysAgoDate = new Date();
+    sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 7);
+    const { data: existingTrends } = await supabase
+        .from('market_trends')
+        .select('title')
+        .gte('detected_at', sevenDaysAgoDate.toISOString());
+
+    const existingTitles = new Set((existingTrends || []).map(t => t.title.toLowerCase()));
+
+    const freshNews = uniqueNews.filter(item => !existingTitles.has(item.title.toLowerCase()));
+
+    console.log(`  ✓ Found ${existingTitles.size} existing articles from the past 7 days.`);
+    console.log(`  🚀 Fresh Articles to process: ${freshNews.length}`);
+
+    if (freshNews.length === 0) {
+        console.log('\nNo fresh articles found. Exiting.');
+        return;
+    }
 
     // Step 2: Noise vs Signal Pre-Filter
     console.log('\nStep 2: Applying Noise vs Signal Filter...');
-    const { signals, noise } = classifyNoiseSignal(uniqueNews);
+    const { signals, noise } = classifyNoiseSignal(freshNews);
 
     const prioritySignals = signals.filter(s => s.is_priority_signal);
     console.log(`  ✓ Signals:  ${signals.length} articles (${prioritySignals.length} high-priority)`);
