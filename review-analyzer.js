@@ -28,16 +28,16 @@ async function scrapeGoogleMapReviews() {
         return [];
     }
 
-    // Process a random batch of 20 outlets daily to manage API limits and execution time
+    // Process a random batch of 50 outlets daily to manage API limits while still covering ~1500 per month
     const shuffled = outlets.sort(() => 0.5 - Math.random());
-    const batch = shuffled.slice(0, 20);
+    const batch = shuffled.slice(0, 50);
 
     let newReviews = [];
 
     for (const outlet of batch) {
         try {
-            // 1. Find Place ID
-            const searchQuery = encodeURIComponent(`${outlet.name} Apotek Alpro ${outlet.region || ''}`);
+            // 1. Find Place ID (name already includes "APOTEK ALPRO")
+            const searchQuery = encodeURIComponent(`${outlet.name} ${outlet.address || ''} ${outlet.region || ''}`.trim());
             const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${searchQuery}&key=${GOOGLE_PLACES_API_KEY}`;
             const searchRes = await axios.get(searchUrl);
 
