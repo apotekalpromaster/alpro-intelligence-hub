@@ -73,6 +73,7 @@ Pastikan hal-hal berikut telah diisi:
 - `SUPABASE_URL` & `SUPABASE_ANON_KEY` (Untuk akses penulisan database).
 - `GROQ_API_KEY` (Sangat krusial untuk kecerdasan analisis AI!).
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` (Kredensial email Anda untuk mengirim log notifikasi/alerts).
+- `GOOGLE_PLACES_API_KEY` (Wajib untuk sistem *scraper* otomatis yang menarik ulasan pelanggan dari Google Maps).
 
 ### 3. Mengoperasikan Lokakarya Ulasan (Customer Reviews)
 Saat ini sistem di-*setup* untuk membaca ulasan baru dari tabel `raw_reviews` (jika Anda membuatnya) atau integrasi lainnya, lalu skrip `review-analyzer.js` akan menganalisisnya menggunakan AI dan memasukkannya ke tabel akhir `review_sentiments`.
@@ -113,6 +114,7 @@ SMTP_PORT=587
 SMTP_USER=your_email
 SMTP_PASS=your_app_password
 SMTP_SECURE=false
+GOOGLE_PLACES_API_KEY=your_google_places_api_key
 
 # frontend/.env
 VITE_SUPABASE_URL=your_supabase_project_url

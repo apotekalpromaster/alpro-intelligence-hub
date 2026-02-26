@@ -1,34 +1,90 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const Groq = require('groq-sdk');
+const axios = require('axios');
 
 // --- Config ---
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const { sendCustomerPulseAlert } = require('./mailer');
 const AI_MODEL = 'llama-3.3-70b-versatile';
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 
-// --- Simulation Data ---
-const NAMES = ['Budi', 'Siti', 'Agus', 'Dewi', 'Rina', 'Joko', 'Tini', 'Bayu', 'Lestari', 'Hendra'];
-// --- Real Data Fetching (Placeholder) ---
-/**
- * In a real-world scenario, you would fetch reviews from Google Maps API, 
- * Apotek Alpro Internal Feedback System, or a 'raw_reviews' table.
- * For now, we omit simulated data to prevent bias.
- */
-async function fetchRealReviews() {
-    // Example: Fetch from a hypothetical raw data table
-    const { data, error } = await supabase
-        .from('raw_reviews')
-        .select('*')
-        .is('processed_at', null)
-        .limit(50);
-
-    if (error) {
-        console.error('❌ Failed to fetch real reviews:', error.message);
+// --- Real Data Scraper (Google Maps) ---
+async function scrapeGoogleMapReviews() {
+    if (!GOOGLE_PLACES_API_KEY) {
+        console.error('❌ GOOGLE_PLACES_API_KEY is not defined in .env! Cannot scrape reviews.');
         return [];
     }
-    return data || [];
+
+    // Fetch active outlets
+    const { data: outlets, error } = await supabase
+        .from('outlets')
+        .select('id, name, region, address')
+        .eq('is_active', true);
+
+    if (error || !outlets || outlets.length === 0) {
+        console.error('❌ Failed to fetch outlets:', error?.message);
+        return [];
+    }
+
+    // Process a random batch of 20 outlets daily to manage API limits and execution time
+    const shuffled = outlets.sort(() => 0.5 - Math.random());
+    const batch = shuffled.slice(0, 20);
+
+    let newReviews = [];
+
+    for (const outlet of batch) {
+        try {
+            // 1. Find Place ID
+            const searchQuery = encodeURIComponent(`${outlet.name} Apotek Alpro ${outlet.region || ''}`);
+            const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${searchQuery}&key=${GOOGLE_PLACES_API_KEY}`;
+            const searchRes = await axios.get(searchUrl);
+
+            if (!searchRes.data.results || searchRes.data.results.length === 0) continue;
+
+            const placeId = searchRes.data.results[0].place_id;
+
+            // 2. Get Place Details (Reviews)
+            const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,rating,reviews,url&key=${GOOGLE_PLACES_API_KEY}`;
+            const detailsRes = await axios.get(detailsUrl);
+            const placeData = detailsRes.data.result;
+
+            if (!placeData || !placeData.reviews) continue;
+
+            // 3. Deduplication Check against Supabase
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const { data: existingReviews } = await supabase
+                .from('review_sentiments')
+                .select('reviewer_name, comment')
+                .eq('outlet_id', outlet.id)
+                .gte('created_at', thirtyDaysAgo.toISOString());
+
+            const existingSet = new Set((existingReviews || []).map(r => `${r.reviewer_name}_${r.comment}`.toLowerCase()));
+
+            // 4. Filter and prepare new reviews
+            for (const r of placeData.reviews) {
+                if (!r.text) continue; // Skip reviews without comments
+
+                const uniqueKey = `${r.author_name}_${r.text}`.toLowerCase();
+                if (!existingSet.has(uniqueKey)) {
+                    newReviews.push({
+                        outlet_id: outlet.id,
+                        reviewer_name: r.author_name,
+                        rating: r.rating,
+                        comment: r.text,
+                        source_url: r.author_url || placeData.url
+                    });
+                }
+            }
+        } catch (err) {
+            console.error(`  ⚠️ Failed to scrape [${outlet.name}]: ${err.message}`);
+        }
+    }
+
+    return newReviews;
 }
 
 // --- Mega-Batching Analysis (Groq / Llama 3.3) ---
@@ -85,14 +141,14 @@ async function main() {
     console.log('========================================\n');
 
     // 1. Fetch Real Data
-    console.log('Step 1: Fetching un-processed reviews from raw_reviews table...');
-    const rawReviews = await fetchRealReviews();
+    console.log('Step 1: Scraping new reviews from Google Maps...');
+    const rawReviews = await scrapeGoogleMapReviews();
 
     if (rawReviews.length === 0) {
         console.log('ℹ️ No new reviews found to analyze. Exiting.');
         return;
     }
-    console.log(`✅ Found ${rawReviews.length} reviews.`);
+    console.log(`✅ Scraped ${rawReviews.length} new unique reviews.`);
 
     // 2. Analyze with Gemini
     const analysisResults = await analyzeReviewsMegaBatch(rawReviews);
@@ -115,6 +171,7 @@ async function main() {
             reviewer_name: review.reviewer_name,
             rating: review.rating,
             comment: review.comment,
+            source_url: review.source_url,
             sentiment_category: result ? result.category : 'NEUTRAL',
             sentiment_score: result && result.category === 'POSITIVE' ? 0.9 : 0.2 // Simplified score
         };
